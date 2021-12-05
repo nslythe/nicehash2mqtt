@@ -5,7 +5,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setuptools.setup(
     name="nicehash2mqtt",
-    version="0.0.1",
+    version="0.0.8",
     author="Nicolas Slythe",
     author_email="nicehash2mqtt@slythe.net",
     description="Bridge between nicehash and mqtt",
@@ -20,9 +20,10 @@ setuptools.setup(
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
     ],
-    scripts=['nicehash2mqtt'],
+    entry_points={'console_scripts':['nicehash2mqtt = nicehash2mqtt:main'] },
+    py_modules=["nicehash2mqtt"],
     package_dir={"": "."},
     packages=setuptools.find_packages(where="."),
     python_requires=">=3.6",
-    install_requires=["requests"]
+    install_requires=["pynicehash", "paho-mqtt"]
 )

@@ -1,3 +1,7 @@
+#!python
+
+import argparse
+
 import pynicehash
 from paho.mqtt import client as mqtt_client
 import random
@@ -99,3 +103,39 @@ class MqttPublisher(object):
     def publish(self, topic, value):
         result = self.client.publish(topic, value)
 
+
+def main():
+    state_delay = 10
+    api_url = "https://api2.nicehash.com"
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--organisation", help="")
+    parser.add_argument("--api_key", help="")
+    parser.add_argument("--api_secret", help="")
+    parser.add_argument("--mqtt_server", help="")
+    parser.add_argument("--mqtt_port", help="", type=int)
+    parser.add_argument("--mqtt_user", help="", default="")
+    parser.add_argument("--mqtt_password", help="", default="")
+    args = parser.parse_args()
+
+    logging.basicConfig(level = logging.INFO)
+    server_type = "prod"
+    nh = pynicehash.NiceHash(api_url, args.organisation, args.api_key, args.api_secret)
+    publisher = MqttPublisher(args.mqtt_server, args.mqtt_port, args.mqtt_user, args.mqtt_password)
+    publisher.connect()
+
+    rigs = []
+    for r in nh.get_rigs():
+        mqtt_rig = MqttMiningRig(publisher, r)
+        rigs.append(mqtt_rig)
+        mqtt_rig.config()
+
+    publisher.start()
+
+    while True:
+        for r in rigs:
+            try:
+                r.publish()
+            except:
+                pass
+        time.sleep(state_delay)
