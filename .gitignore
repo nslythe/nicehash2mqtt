@@ -4,3 +4,4 @@ src/pynicehash.egg-info/
 build/
 .venv/
 test.py
+nicehash2mqtt.egg-info/

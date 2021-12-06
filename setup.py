@@ -5,7 +5,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setuptools.setup(
     name="nicehash2mqtt",
-    version="0.0.8",
+    version="0.0.9",
     author="Nicolas Slythe",
     author_email="nicehash2mqtt@slythe.net",
     description="Bridge between nicehash and mqtt",
