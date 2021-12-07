@@ -47,7 +47,7 @@ class MqttMiningRig(object):
             "icon": "mdi:pickaxe",
             "payload_on": "MINING",
             "payload_off": "INACTIVE",
-        }))
+        }), retain=True)
 
     def get_received_command_fnc(self, device):
         def received_command(payload):
@@ -100,8 +100,8 @@ class MqttPublisher(object):
     def start(self):
         self.client.loop_start()
 
-    def publish(self, topic, value):
-        result = self.client.publish(topic, value)
+    def publish(self, topic, value, retain=False):
+        result = self.client.publish(topic, value, retain = retain)
 
 
 def main():
