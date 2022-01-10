@@ -100,6 +100,9 @@ class MqttPublisher(object):
     def start(self):
         self.client.loop_start()
 
+    def loop(self):
+        self.client.loop()
+
     def publish(self, topic, value, retain=False):
         result = self.client.publish(topic, value, retain = retain)
 
@@ -130,11 +133,10 @@ def main():
         mqtt_rig.config()
         rigs.append(mqtt_rig)
 
-    publisher.start()
-
     while True:
         for r in rigs:
             try:
+                publisher.loop()
                 r.publish()
             except:
                 pass
