@@ -127,6 +127,7 @@ def main():
     rigs = []
     for r in nh.get_rigs():
         mqtt_rig = MqttMiningRig(publisher, r)
+        mqtt_rig.config()
         rigs.append(mqtt_rig)
 
     publisher.start()
@@ -134,7 +135,6 @@ def main():
     while True:
         for r in rigs:
             try:
-                r.config()
                 r.publish()
             except:
                 pass
