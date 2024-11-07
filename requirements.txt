@@ -1,0 +1,2 @@
+pynicehash
+paho-mqtt

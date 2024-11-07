@@ -87,7 +87,7 @@ class MqttPublisher(object):
             raise Exception()
 
     def connect(self):
-        self.client = mqtt_client.Client(self.client_id)
+        self.client = mqtt_client.Client(mqtt_client.CallbackAPIVersion.VERSION2)
         self.client.username_pw_set(self.user, self.password)
         self.client.on_connect = self.on_connect
         self.client.on_message = self.on_message
@@ -104,7 +104,18 @@ class MqttPublisher(object):
         result = self.client.publish(topic, value, retain = retain)
 
 
+def init_logging(*, level = logging.INFO):
+    logging.basicConfig(
+        format="%(asctime)s %(name)s %(levelname)s %(message)s",
+        level=level,
+        datefmt="%Y-%m-%d %H:%M:%S")
+    logging.getLogger("amqp").setLevel(logging.WARNING)
+    logging.getLogger("pymongo").setLevel(logging.WARNING)
+    logging.getLogger("model").setLevel(logging.INFO)
+
 def main():
+    init_logging(level=logging.DEBUG)
+
     state_delay = 10
     api_url = "https://api2.nicehash.com"
 
@@ -119,17 +130,23 @@ def main():
     args = parser.parse_args()
 
     logging.basicConfig(level = logging.INFO)
-    server_type = "prod"
-    nh = pynicehash.NiceHash(api_url, args.organisation, args.api_key, args.api_secret)
-    publisher = MqttPublisher(args.mqtt_server, args.mqtt_port, args.mqtt_user, args.mqtt_password)
-    publisher.connect()
 
-    rigs = []
-    for r in nh.get_rigs():
-        mqtt_rig = MqttMiningRig(publisher, r)
-        mqtt_rig.config()
-        rigs.append(mqtt_rig)
+    logging.info("starting")
 
+    try:
+        server_type = "prod"
+        nh = pynicehash.NiceHash(api_url, args.organisation, args.api_key, args.api_secret)
+        publisher = MqttPublisher(args.mqtt_server, args.mqtt_port, args.mqtt_user, args.mqtt_password)
+        publisher.connect()
+
+        rigs = []
+        for r in nh.get_rigs():
+            mqtt_rig = MqttMiningRig(publisher, r)
+            mqtt_rig.config()
+            rigs.append(mqtt_rig)
+
+    except:
+        logging.exception("Failed")
     #publisher.start()
 
     while True:
@@ -140,3 +157,6 @@ def main():
 #            except:
 #                pass
         time.sleep(state_delay)
+
+if __name__ == "__main__":
+    main()
