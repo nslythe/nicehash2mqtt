@@ -5,3 +5,4 @@ build/
 .venv/
 test.py
 nicehash2mqtt.egg-info/
+.vscode/

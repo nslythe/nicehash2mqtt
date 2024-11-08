@@ -7,58 +7,119 @@ from paho.mqtt import client as mqtt_client
 import random
 import time
 import json
+import datetime
 import logging
 
+class MqttMiningRigDevice(object):
+    def __init__(self, device_id, device):
+        self.device: pynicehash.MiningDevice = device
+        self.device_id = device_id
+
 class MqttMiningRig(object):
-    def __init__(self, publisher, rig):
-        self.rig = rig
+    def __init__(self, rig_id, publisher, rig):
+        self.rig: pynicehash.MiningRig = rig
+        self.rig_id = rig_id
         self.publisher = publisher
+        self.devices: list[MqttMiningRigDevice] = []
 
     def config(self):
+        device_id = 0
         for d in self.rig.devices:
-            self.send_config(d)
-            self.publisher.subscribe(self.get_topic(d) + "/set", self.get_received_command_fnc(d))            
+            self.devices.append(MqttMiningRigDevice(device_id, d))
+            device_id += 1
+        
+        for d in self.devices:
+            self.send_switch_config(d)
+            self.send_sensor_config(d, "_temp", "°C")
+            self.send_sensor_config(d, "_load", "%")
+            topic = self.get_nicehash2mqtt_topic(d) + "/set"
+            self.publisher.subscribe(topic, self.get_received_command_fnc(d))
 
     def publish(self):
+        logging.getLogger(__name__).info(f"Update data from nicehash")
+
         self.rig.update()
-        
+
+        self.devices = []
+        device_id = 0
         for d in self.rig.devices:
+            self.devices.append(MqttMiningRigDevice(device_id, d))
+            device_id += 1
+        
+        for d in self.devices:
             status = "INACTIVE"
             available = "online"
-            if d.status == "MINING" or d.status == "BENCHMARKING" or d.status == "PENDING":
-                status = "MINING"
-            if d.status == "UNKNOWN" or d.status == "DISABLED" or d.status == "OFFLINE":
+            if d.device.status == pynicehash.DeviceMiningStatusEnum.DISABLED:
                 available = "offline"
-            self.publisher.publish(self.get_topic(d) + "/state", status)
-            self.publisher.publish(self.get_topic(d) + "/available", available)
+            if d.device.status == pynicehash.DeviceMiningStatusEnum.BENCHMARKING or\
+                d.device.status == pynicehash.DeviceMiningStatusEnum.MINING:
+                status = "MINING"
+            self.publisher.publish(self.get_nicehash2mqtt_topic(d) + "/state", status)
+            self.publisher.publish(self.get_nicehash2mqtt_topic(d) + "/available", available)
+            self.publisher.publish(self.get_nicehash2mqtt_topic(d)+ "_temp" + "/state", d.device.temperature)
+            self.publisher.publish(self.get_nicehash2mqtt_topic(d)+ "_temp" + "/available", "online")
+            self.publisher.publish(self.get_nicehash2mqtt_topic(d)+ "_load" + "/state", d.device.load)
+            self.publisher.publish(self.get_nicehash2mqtt_topic(d)+ "_load" + "/available", "online")
+            
 
-    def get_topic(self, device):
-        return f"homeassistant/switch/pynicehash/{device.parent_rig.id}_{device.id}"
+    def get_switch_config_topic(self, device: MqttMiningRigDevice):
+        return f"homeassistant/switch/nicehash2mqtt_{self.rig_id}_{device.device_id}/switch/config"
 
-    def send_config(self, device):
-        topic = self.get_topic(device) + "/config"
-        self.publisher.publish(topic, json.dumps({
-            "state_topic": self.get_topic(device) + "/state",
-            "command_topic" : self.get_topic(device) + "/set",
-            "availability_topic" : self.get_topic(device) + "/available",
-            "name": f"{device.parent_rig.name.upper()} {device.name}",
-            "unique_id": f"{device.parent_rig.id}_{device.id}_state",
+    def get_sensor_config_topic(self, device: MqttMiningRigDevice, sufix):
+        return f"homeassistant/sensor/nicehash2mqtt_{self.rig_id}_{device.device_id}{sufix}/sensor/config"
+
+    def get_nicehash2mqtt_topic(self, device: MqttMiningRigDevice):
+        return f"nicehash2mqtt/nicehash2mqtt_{self.rig_id}_{device.device_id}"
+
+
+    def send_switch_config(self, device: MqttMiningRigDevice):
+        self.publisher.publish(self.get_switch_config_topic(device), json.dumps({
+            "state_topic": self.get_nicehash2mqtt_topic(device) + "/state",
+            "command_topic" : self.get_nicehash2mqtt_topic(device) + "/set",
+            "availability_topic" : self.get_nicehash2mqtt_topic(device) + "/available",
+            "payload_available": "online",
+            "payload_not_available": "offline",
+            "name": device.device.name,
+            "unique_id": f"{device.device.parent_rig.id}_{device.device_id}_state",
             "force_update": True,
             "icon": "mdi:pickaxe",
             "payload_on": "MINING",
             "payload_off": "INACTIVE",
+            "device": {
+                "configuration_url" : "https://www.nicehash.com/my/mining/rigs",
+                "name": self.rig.name,
+                "identifiers": [self.rig.id],
+                "manufacturer": "nicehash2mqtt"
+            }
         }), retain=True)
 
-    def get_received_command_fnc(self, device):
+    def send_sensor_config(self, device: MqttMiningRigDevice, sufix, unit):
+        self.publisher.publish(self.get_sensor_config_topic(device, sufix), json.dumps({
+            "state_topic": self.get_nicehash2mqtt_topic(device) + sufix + "/state",
+            "unit_of_measurement": unit,
+            "availability_topic" : self.get_nicehash2mqtt_topic(device) + sufix + "/available",
+            "name": device.device.name,
+            "unique_id": f"{device.device.parent_rig.id}_{device.device_id}" + sufix,
+            "force_update": True,
+            "icon": "mdi:thermometer",
+            "device": {
+                "configuration_url" : "https://www.nicehash.com/my/mining/rigs",
+                "name": self.rig.name,
+                "identifiers": [self.rig.id],
+                "manufacturer": "nicehash2mqtt"
+            }
+        }), retain=True)
+
+
+    def get_received_command_fnc(self, device: MqttMiningRigDevice):
         def received_command(payload):
             if payload == "MINING":
-                mining_status = pynicehash.MiningStatus.START
+                device.device.start_mining()
             elif payload == "INACTIVE":
-                mining_status = pynicehash.MiningStatus.STOP
+                device.device.stop_mining()
             else:
                 raise Exception()
-            self.rig.set_device_status(device, mining_status)
-            self.publish()
+            self.publisher.publish(self.get_nicehash2mqtt_topic(device) + "/state", "MINING")
 
         return received_command
 
@@ -72,8 +133,8 @@ class MqttPublisher(object):
         self.client = None
         self.subscribe_topic = {}
 
-    def on_connect(self, client, userdata, flags, rc):
-        if rc == 0:
+    def on_connect(self, client, userdata, flags, reason_code, properties):
+        if reason_code == 0:
             logging.getLogger(__name__).info("Connected to mqtt")
         else:
             logging.getLogger(__name__).error(f"Failed to connect to mqtt error_code {rc}")
@@ -101,7 +162,7 @@ class MqttPublisher(object):
         self.client.loop_start()
 
     def publish(self, topic, value, retain=False):
-        result = self.client.publish(topic, value, retain = retain)
+         result = self.client.publish(topic, value, retain = retain)
 
 
 def init_logging(*, level = logging.INFO):
@@ -114,8 +175,8 @@ def init_logging(*, level = logging.INFO):
     logging.getLogger("model").setLevel(logging.INFO)
 
 def main():
-    init_logging(level=logging.DEBUG)
-
+    init_logging(level=logging.INFO)
+ 
     state_delay = 10
     api_url = "https://api2.nicehash.com"
 
@@ -140,23 +201,29 @@ def main():
         publisher.connect()
 
         rigs = []
+        rig_id = 0
         for r in nh.get_rigs():
-            mqtt_rig = MqttMiningRig(publisher, r)
-            mqtt_rig.config()
-            rigs.append(mqtt_rig)
+            if r.is_managed:
+                mqtt_rig = MqttMiningRig(rig_id, publisher, r)
+                mqtt_rig.config()
+                rigs.append(mqtt_rig)
+                rig_id += 1
 
     except:
         logging.exception("Failed")
-    #publisher.start()
+    
+    publisher.start()
 
+    last_ran = datetime.datetime(year=1979, month=1, day=1)
     while True:
-#        for r in rigs:
-#            try:
-#                pass
-#                r.publish()
-#            except:
-#                pass
-        time.sleep(state_delay)
+        for r in rigs:
+            try:
+                if (datetime.datetime.now() - last_ran).seconds >= state_delay:
+                    r.publish()
+                    last_ran = datetime.datetime.now()
+            except:
+                logging.exception("Publish failed")
+        time.sleep(0.1)
 
 if __name__ == "__main__":
     main()
