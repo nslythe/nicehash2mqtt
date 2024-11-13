@@ -159,6 +159,7 @@ class MqttPublisher(object):
         self.subscribe_topic[topic] = fnc
 
     def start(self):
+        self.client._reconnect_on_failure = True
         self.client.loop_start()
 
     def publish(self, topic, value, retain=False):
@@ -195,7 +196,6 @@ def main():
     logging.info("starting")
 
     try:
-        server_type = "prod"
         nh = pynicehash.NiceHash(api_url, args.organisation, args.api_key, args.api_secret)
         publisher = MqttPublisher(args.mqtt_server, args.mqtt_port, args.mqtt_user, args.mqtt_password)
         publisher.connect()

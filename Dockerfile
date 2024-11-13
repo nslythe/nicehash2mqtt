@@ -4,8 +4,8 @@ COPY requirements.txt /requirements.txt
 
 RUN python -m pip install -r /requirements.txt
 
-COPY * /app
-
+RUN mkdir /app
+COPY *.py /app
 WORKDIR /app
 
 ENV ORGANISATION=

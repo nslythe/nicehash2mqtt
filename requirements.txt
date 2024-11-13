@@ -1,2 +1,2 @@
-pynicehash==0.0.12
+pynicehash==0.0.13
 paho-mqtt
